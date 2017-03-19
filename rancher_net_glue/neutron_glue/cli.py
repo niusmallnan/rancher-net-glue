@@ -4,8 +4,8 @@ import logging
 from argparse import ArgumentParser
 
 from .handler import RancherConnector
-from common.cli_base import validate_rancher_args, add_ranche_args
-from common.log_base import SetLogLevel, LOG_LEVELS
+from rancher_net_glue.common.cli_base import validate_rancher_args, add_ranche_args
+from rancher_net_glue.common.log_base import SetLogLevel, LOG_LEVELS
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,8 @@ def main():
         return
 
     try:
-        if args.rancher_url.endswith('/'):
+        rancher_url = args.rancher_url
+        if rancher_url.endswith('/'):
             rancher_url = args.rancher_url[:-1]
         handler = RancherConnector(rancher_url, args.project_id,
                                    args.access_key, args.secret_key)

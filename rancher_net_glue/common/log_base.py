@@ -19,5 +19,6 @@ class SetLogLevel(Action):
         if level not in LOG_LEVELS:
             raise ValueError("Invalid log level: {0}. Must be one of {1}"
                              .format(values, LOG_LEVELS))
-        logging.getLogger('neutron_glue').setLevel(LOG_LEVELS[level])
+        FORMAT = '%(asctime)s %(name)s %(levelname)s %(message)s'
+        logging.basicConfig(level=LOG_LEVELS[level], format=FORMAT)
 

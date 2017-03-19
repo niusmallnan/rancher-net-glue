@@ -1,13 +1,17 @@
 from __future__ import absolute_import
 
+import logging
+
 from keystoneauth1 import identity
 from keystoneauth1 import session
 from neutronclient.v2_0 import client
 
+logger = logging.getLogger(__name__)
 
 CONTAINER_KIND = 'container'
 BRIDGE_KIND = 'bridge'
 _BRIDGE_MAC_PRE = '00:aa:bb:'
+
 
 class AddressPair(object):
 
@@ -22,12 +26,14 @@ class AddressPair(object):
     def json(self):
         return {'ip_address': self.ip, 'mac_address': self.mac}
 
+    def __repr__(self):
+        return str(self.json())
 
 class PortUpdate(object):
 
-    def __init__(self, neutron_port_id):
+    def __init__(self, neutron_port_id, address_pairs=[]):
         self.neutron_port_id = neutron_port_id
-        self.address_pairs = []
+        self.address_pairs = address_pairs
 
     def add_address_pair(self, address_pair):
         if address_pair not in self.address_pairs:
@@ -63,10 +69,13 @@ class PortUpdateExecutor(object):
         self.port_update_jobs = {}
 
     def add_job(self, host_id, address_pair, neutron_port_id=None):
+        logger.info('host_id: %s, address_pair: %s, neutron_port_id: %s' % (host_id,
+                                                                            address_pair,
+                                                                            neutron_port_id))
         if self.port_update_jobs.has_key(host_id):
             self.port_update_jobs[host_id].add_address_pair(address_pair)
         else:
-            job = PortUpdate(neutron_port_id, address_pair)
+            job = PortUpdate(neutron_port_id, [address_pair])
             self.port_update_jobs[host_id] = job
 
     def execute_all(self):

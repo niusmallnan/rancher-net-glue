@@ -1,5 +1,9 @@
 from __future__ import absolute_import
+
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class API(object):
@@ -33,16 +37,12 @@ class API(object):
         return None
 
     def get_running_instances(self):
-        url = '{0}/v2-beta/projects/{1}/instances'\
-            .format(self.rancher_url, self.project_id)
+        url = '{0}/v2-beta/projects/{1}/instances?state=running'\
+            .format(self.url, self.project_id)
         res = requests.get(url, headers=self._headers)
         res_data = res.json()
         if res_data['data'] and len(res_data['data']) > 0:
-            instances = []
-            for resource in res_data['data']:
-                if resource['state'] == 'running':
-                    instances.append(resource['data'])
-            return instances
+            return res_data['data']
         return None
 
 

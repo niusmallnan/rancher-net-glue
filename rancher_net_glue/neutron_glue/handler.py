@@ -25,6 +25,7 @@ class RancherConnector(object):
         self.api_token = b64encode("{0}:{1}".format(access_key, secret_key))
         job_executor = PortUpdateExecutor()
         #job_executor.initialize()
+        job_executor.port_update_jobs = {}
         self.job_executor = job_executor
 
     def __call__(self):
@@ -36,6 +37,7 @@ class RancherConnector(object):
         hosts = api.get_active_hosts()
         if hosts:
             for host in hosts:
+                logger.debug('host: %s' % host)
                 host_id = host['id']
                 agent_ip = host['agentIpAddress']
                 neutron_port_id = util.get_neutron_port_id(host)
@@ -45,6 +47,7 @@ class RancherConnector(object):
         instances = api.get_running_instances()
         if instances:
             for inst in instances:
+                logger.debug('instance: %s' % inst)
                 host_id = inst['hostId']
                 ip = util.get_container_ip(inst)
                 mac = util.get_container_mac(inst)
