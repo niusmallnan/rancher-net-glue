@@ -24,7 +24,10 @@ class AddressPair(object):
         return (self.ip == other.ip and self.mac == other.mac)
 
     def json(self):
-        return {'ip_address': self.ip, 'mac_address': self.mac}
+        ip = self.ip
+        if ip:
+            ip = str(self.ip.split('/')[0])
+        return {'ip_address': ip, 'mac_address': self.mac}
 
     def __repr__(self):
         return str(self.json())
@@ -40,15 +43,25 @@ class PortUpdate(object):
             self.address_pairs.append(address_pair)
 
     def __call__(self, neutron):
+        if not neutron:
+            logger.info('neutron client not initialize')
+            return
+
         allowed_address_pairs = []
         for ap in self.address_pairs:
-            if ap.kind == BRIDGE_KIND:
+            if ap.kind == BRIDGE_KIND and not ap.mac:
                 port_info = neutron.show_port(self.neutron_port_id)
                 port_mac = port_info.mac_address
                 ap.mac = _BRIDGE_MAC_PRE + ':'.join(port_mac.split(':')[3:])
-            allowed_address_pairs.append(ap.json())
+            if ap.ip:
+                allowed_address_pairs.append(ap.json())
+        logger.debug('neutron_port_id: %s, allowed_address_pairs: %s' % (self.neutron_port_id,
+                                                                         allowed_address_pairs))
         neutron.update_port(self.neutron_port_id,
                             allowed_address_pairs=allowed_address_pairs)
+
+    def __repr__(self):
+        return 'neutron_port_id: %s, address_pairs: %s' % (self.neutron_port_id, self.address_pairs)
 
 
 class PortUpdateExecutor(object):
@@ -69,19 +82,17 @@ class PortUpdateExecutor(object):
         self.port_update_jobs = {}
 
     def add_job(self, host_id, address_pair, neutron_port_id=None):
-        logger.info('host_id: %s, address_pair: %s, neutron_port_id: %s' % (host_id,
-                                                                            address_pair,
-                                                                            neutron_port_id))
         if self.port_update_jobs.has_key(host_id):
             self.port_update_jobs[host_id].add_address_pair(address_pair)
         else:
             job = PortUpdate(neutron_port_id, [address_pair])
             self.port_update_jobs[host_id] = job
+        logger.info('host %s job added: %s' % (host_id, self.port_update_jobs[host_id]))
 
     def execute_all(self):
         for job in self.port_update_jobs.itervalues():
-            job()
+            job(self.neutron)
 
     def execute_one(self, host_id):
-        self.port_update_jobs[host_id]()
+        self.port_update_jobs[host_id](self.neutron)
 

@@ -25,17 +25,6 @@ class API(object):
             return res_data['data']
         return None
 
-    def get_hosts_neutron_info(self):
-        hosts = self.get_active_hosts()
-        if hosts:
-            neutron_info = {}
-            for host in hosts:
-                agent_ip = host['agentIpAddress']
-                neutron_port_id = host['labels']['io.rancher.neutron.port_id']
-                neutron_info[neutron_port_id] = agent_ip
-            return neutron_info
-        return None
-
     def get_running_instances(self):
         url = '{0}/v2-beta/projects/{1}/instances?state=running'\
             .format(self.url, self.project_id)
@@ -45,4 +34,18 @@ class API(object):
             return res_data['data']
         return None
 
+    def get_host(self, host_id):
+        url = '{0}/v2-beta/projects/{1}/hosts/{2}'\
+            .format(self.url, self.project_id, host_id)
+        res = requests.get(url, headers=self._headers)
+        return res.json()
+
+    def get_instances_by_host(self, host_id):
+        url = '{0}/v2-beta/projects/{1}/hosts/{2}/instances?state=running'\
+            .format(self.url, self.project_id, host_id)
+        res = requests.get(url, headers=self._headers)
+        res_data = res.json()
+        if res_data['data'] and len(res_data['data']) > 0:
+            return res_data['data']
+        return None
 

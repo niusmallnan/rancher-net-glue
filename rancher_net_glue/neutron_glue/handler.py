@@ -26,6 +26,8 @@ class RancherConnector(object):
         job_executor = PortUpdateExecutor()
         #job_executor.initialize()
         job_executor.port_update_jobs = {}
+        job_executor.neutron = None
+
         self.job_executor = job_executor
 
     def __call__(self):
@@ -62,7 +64,7 @@ class RancherConnector(object):
         }
         websocket_url = self.rancher_url.replace('http', 'ws')
         url = '{0}/v2-beta/projects/{1}/subscribe?eventNames='\
-            'resource.change&include=services'\
+            'resource.change'\
             .format(websocket_url, self.project_id)
         self.ws = websocket.WebSocketApp(url, header=header,
                                          on_message=self._on_message,
@@ -86,23 +88,40 @@ class RancherConnector(object):
         msg = json.loads(message)
         if msg['name'] == 'resource.change' and msg['data']:
             handler = MessageHandler(msg, self.rancher_url,
-                                     self.project_id, self.api_token)
+                                     self.project_id, self.api_token,
+                                     job_executor=self.job_executor)
             handler.start()
 
 
 class MessageHandler(Thread):
-    def __init__(self, message, rancher_url, project_id, api_token):
+    def __init__(self, message, rancher_url, project_id, api_token,
+                 job_executor):
         Thread.__init__(self)
         self.message = message
         self.rancher_url = rancher_url
         self.project_id = project_id
         self.api_token = api_token
+        self.job_executor = job_executor
 
     def run(self):
         resource = self.message['data']['resource']
+        logger.info('rancher events resource: %s' % resource)
         if resource['type'] == 'container' and \
-                resource['state'] in ['running', 'removed', 'stopped']:
+                resource['state'] in ['running', 'stopped']:
+            host_id = resource['hostId']
+            api = API(self.rancher_url, self.project_id, self.api_token)
+            host = api.get_host(host_id)
+            agent_ip = host['agentIpAddress']
+            neutron_port_id = util.get_neutron_port_id(host)
+            host_ap = AddressPair(agent_ip, None, BRIDGE_KIND)
+            self.job_executor.add_job(host_id, host_ap, neutron_port_id)
 
-            api = API(self.rancher_url, self.project_id)
-            api()
+            instances = api.get_instances_by_host(host_id)
+            for inst in instances:
+                ip = util.get_container_ip(inst)
+                mac = util.get_container_mac(inst)
+                ap = AddressPair(ip, mac)
+                self.job_executor.add_job(host_id, ap)
+
+            self.job_executor.execute_one(host_id)
 
