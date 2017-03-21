@@ -9,7 +9,7 @@ from threading import Thread
 from rancher_net_glue.neutron_glue import util
 from .compat import b64encode
 from .rancher import API
-from .neutron import AddressPair, PortUpdateExecutor, BRIDGE_KIND
+from .neutron import AddressPair, BRIDGE_KIND
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +19,10 @@ logging.getLogger("requests").setLevel(logging.WARNING)
 
 class RancherConnector(object):
 
-    def __init__(self, rancher_url, project_id, access_key, secret_key):
+    def __init__(self, rancher_url, project_id, access_key, secret_key, job_executor):
         self.rancher_url = rancher_url
         self.project_id = project_id
         self.api_token = b64encode("{0}:{1}".format(access_key, secret_key))
-        job_executor = PortUpdateExecutor()
-        #job_executor.initialize()
-        job_executor.port_update_jobs = {}
-        job_executor.neutron = None
 
         self.job_executor = job_executor
 

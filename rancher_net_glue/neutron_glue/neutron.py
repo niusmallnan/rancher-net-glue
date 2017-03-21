@@ -27,10 +27,14 @@ class AddressPair(object):
         ip = self.ip
         if ip:
             ip = str(self.ip.split('/')[0])
-        return {'ip_address': ip, 'mac_address': self.mac}
+        return {'ip_address': ip, 'mac_address': str(self.mac)}
+
+    def is_empty(self):
+        return (not self.ip and not self.mac)
 
     def __repr__(self):
         return str(self.json())
+
 
 class PortUpdate(object):
 
@@ -55,7 +59,7 @@ class PortUpdate(object):
                 ap.mac = _BRIDGE_MAC_PRE + ':'.join(port_mac.split(':')[3:])
             if ap.ip:
                 allowed_address_pairs.append(ap.json())
-        logger.debug('neutron_port_id: %s, allowed_address_pairs: %s' % (self.neutron_port_id,
+        logger.info('neutron_port_id: %s, allowed_address_pairs: %s' % (self.neutron_port_id,
                                                                          allowed_address_pairs))
         neutron.update_port(self.neutron_port_id,
                             allowed_address_pairs=allowed_address_pairs)
@@ -82,12 +86,15 @@ class PortUpdateExecutor(object):
         self.port_update_jobs = {}
 
     def add_job(self, host_id, address_pair, neutron_port_id=None):
+        if address_pair.is_empty():
+            logger.info('address_pair is empty, ignored...')
+            return
         if self.port_update_jobs.has_key(host_id):
             self.port_update_jobs[host_id].add_address_pair(address_pair)
         else:
             job = PortUpdate(neutron_port_id, [address_pair])
             self.port_update_jobs[host_id] = job
-        logger.info('host %s job added: %s' % (host_id, self.port_update_jobs[host_id]))
+        logger.info('host %s job added: %s' % (host_id, address_pair))
 
     def execute_all(self):
         for job in self.port_update_jobs.itervalues():
