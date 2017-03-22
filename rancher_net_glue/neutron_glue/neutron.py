@@ -21,7 +21,7 @@ class AddressPair(object):
         self.kind = kind
 
     def __eq__(self, other):
-        return (self.ip == other.ip and self.mac == other.mac)
+        return self.ip == other.ip
 
     def json(self):
         ip = self.ip
@@ -30,7 +30,7 @@ class AddressPair(object):
         return {'ip_address': ip, 'mac_address': str(self.mac)}
 
     def is_empty(self):
-        return (not self.ip and not self.mac)
+        return not self.ip
 
     def __repr__(self):
         return str(self.json())
@@ -46,6 +46,11 @@ class PortUpdate(object):
         if address_pair not in self.address_pairs:
             self.address_pairs.append(address_pair)
 
+    def clean_container_aps(self):
+        host_aps = [item for item in self.address_pairs
+                    if item.kind == BRIDGE_KIND]
+        self.address_pairs = host_aps
+
     def __call__(self, neutron):
         if not neutron:
             logger.info('neutron client not initialize')
@@ -55,14 +60,14 @@ class PortUpdate(object):
         for ap in self.address_pairs:
             if ap.kind == BRIDGE_KIND and not ap.mac:
                 port_info = neutron.show_port(self.neutron_port_id)
-                port_mac = port_info.mac_address
+                port_mac = port_info['port']['mac_address']
                 ap.mac = _BRIDGE_MAC_PRE + ':'.join(port_mac.split(':')[3:])
             if ap.ip:
                 allowed_address_pairs.append(ap.json())
         logger.info('neutron_port_id: %s, allowed_address_pairs: %s' % (self.neutron_port_id,
                                                                          allowed_address_pairs))
         neutron.update_port(self.neutron_port_id,
-                            allowed_address_pairs=allowed_address_pairs)
+                            {'port': {'allowed_address_pairs':allowed_address_pairs}})
 
     def __repr__(self):
         return 'neutron_port_id: %s, address_pairs: %s' % (self.neutron_port_id, self.address_pairs)
@@ -95,6 +100,12 @@ class PortUpdateExecutor(object):
             job = PortUpdate(neutron_port_id, [address_pair])
             self.port_update_jobs[host_id] = job
         logger.info('host %s job added: %s' % (host_id, address_pair))
+
+    def clean_one(self, host_id):
+        if self.port_update_jobs.has_key(host_id):
+            logger.info('clean port update jobs on host: %s' % host_id)
+            port_update = self.port_update_jobs[host_id]
+            port_update.clean_container_aps()
 
     def execute_all(self):
         for job in self.port_update_jobs.itervalues():

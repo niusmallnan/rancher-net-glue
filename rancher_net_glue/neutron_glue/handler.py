@@ -4,7 +4,7 @@ import json
 import logging
 import websocket
 
-from threading import Thread
+from threading import Thread, Lock
 
 from rancher_net_glue.neutron_glue import util
 from .compat import b64encode
@@ -25,6 +25,7 @@ class RancherConnector(object):
         self.api_token = b64encode("{0}:{1}".format(access_key, secret_key))
 
         self.job_executor = job_executor
+        self.lock = Lock()
 
     def __call__(self):
         self._start_reload()
@@ -85,26 +86,36 @@ class RancherConnector(object):
         if msg['name'] == 'resource.change' and msg['data']:
             handler = MessageHandler(msg, self.rancher_url,
                                      self.project_id, self.api_token,
-                                     job_executor=self.job_executor)
+                                     job_executor=self.job_executor,
+                                     lock=self.lock)
             handler.start()
 
 
 class MessageHandler(Thread):
     def __init__(self, message, rancher_url, project_id, api_token,
-                 job_executor):
+                 job_executor, lock):
         Thread.__init__(self)
         self.message = message
         self.rancher_url = rancher_url
         self.project_id = project_id
         self.api_token = api_token
         self.job_executor = job_executor
+        self.lock = lock
 
     def run(self):
         resource = self.message['data']['resource']
-        logger.info('rancher events resource: %s' % resource)
+        resource_state = None
+        if resource.has_key['state']:
+            resource_state = resource_state['state']
+        logger.info('rancher events resource type: %s, state:%s' %(resource['type'],
+                                                                   resource_state))
         if resource['type'] == 'container' and \
-                resource['state'] in ['running', 'stopped']:
+                resource['state'] in ['running', 'removed']:
+            self.lock.acquire()
+            logger.info('rancher events resource: %s' % resource)
             host_id = resource['hostId']
+            self.job_executor.clean_one(host_id)
+
             api = API(self.rancher_url, self.project_id, self.api_token)
             host = api.get_host(host_id)
             agent_ip = host['agentIpAddress']
@@ -120,4 +131,5 @@ class MessageHandler(Thread):
                 self.job_executor.add_job(host_id, ap)
 
             self.job_executor.execute_one(host_id)
+            self.lock.release()
 
